@@ -26,8 +26,28 @@ velocity db -1
 rand dw (?)
 PipeSpeed dw 4
 PipeDistance dw 60
-;clear db 1 dup (8,8,8,8)
-Score db '0000$'
+Score db '0000',13,10,'$'
+endText1 db 'Your Score Was:$'
+endText2 db 10,'Do You Want To Play Again?',10,10,10,13,'        Y-Yes                N-No$'     
+logoText db ?
+ db '        ______ __                               ____   _            __',13,10
+db '        / ____// /____ _ ____   ____   __  __   / __ ) (_)_____ ____/ /',13,10
+db '       / /_   / // __ `// __ \ / __ \ / / / /  / __  |/ // ___// __  / ',13,10
+db '      / __/  / // /_/ // /_/ // /_/ // /_/ /  / /_/ // // /   / /_/ /  ',13,10
+db '     /_/    /_/ \__,_// .___// .___/ \__, /  /_____//_//_/    \__,_/   ',13,10
+db '                     /_/    /_/     /____/                             $',13,10   
+startText db 10,10,10,10,13
+db '            _____                      _____                       ',13,10
+db '           |  __ \                    / ____|                      ',13,10
+db '           | |__) | __ ___  ___ ___  | (___  _ __   __ _  ___ ___  ',13,10
+db '           |  ___/  __/ _ \/ __/ __|  \___ \|  _ \ / _` |/ __/ _ \ ',13,10
+db '           | |   | | |  __/\__ \__ \  ____) | |_) | (_| | (_|  __/ ',13,10
+db '           |_|   |_|_ \___||___/___/_|_____/| .__/ \__,_|\___\___| ',13,10
+db '                   | |         / ____| |    | |    | |             ',13,10
+db '                   | |_ ___   | (___ | |_ __|_|_ __| |_            ',13,10
+db '                   | __/ _ \   \___ \| __/ _` |  __| __|           ',13,10
+db '                   | || (_) |  ____) | || (_| | |  | |_            ',13,10
+db '                    \__\___/  |_____/ \__\__,_|_|   \__|           $',13,10
 CODESEG
 
 	
@@ -53,9 +73,21 @@ CODESEG
 		mov cx, [bx]
 		mov ah, 0Dh
 		int 10h
+		cmp al, 0
+		je noCollison
+		cmp al, 15
+		je noCollison
+		cmp al, 16
+		je noCollison
+		cmp al, 42
+		je noCollison
+		cmp al, 43
+		je noCollison
+		cmp al, 44
+		je noCollison
 		cmp al, 78
 		je noCollison
-		jmp exit
+		jmp Hit
 		noCollison:
 		pop cx
 		loop CollisionLoop
@@ -204,35 +236,6 @@ endp FillArea
 	pop ax
 	ret 8
 endp DisplayArr
-	proc FillScreen ;1 input 1. color   fills the screen with the color
-	
-	push ax
-	push dx
-	push cx
-	push bp
-	mov bp,sp
-	mov al,[bp+10]
-	mov cx, 200
-	Rows:
-		mov dx, cx
-		dec dx
-		mov cx,320
-		Collums:
-			dec cx
-			mov ah, 0ch
-			int 10h
-			cmp cx, 0
-			jne Collums
-		mov cx, dx
-		inc cx
-		loop Rows
-	pop bp
-	pop cx
-	pop dx
-	pop ax
-	ret 2
-endp FillScreen
-
 	proc BackGround ;display the backGround
 	push 0
 	push 20
@@ -264,11 +267,6 @@ endp BackGround
 	push 149
 	push [word ptr y]
 	call subNfromArray
-	;push offset BirdBlue
-	;push offset BirdX
-	;push offset BirdYoffset
-	;push 149
-	;call DisplayArr
 	push offset BirdX
 	push offset BirdYoffset
 	push 149
@@ -281,7 +279,7 @@ endp BackGround
 	pop bx
 	ret
 endp drawBird
-	proc drawPipe ;draws the top and bottom pipes
+proc drawPipe
 	push bx
 	push offset PipeX
 	push offset PipeX_offset
@@ -324,6 +322,55 @@ endp drawBird
 		add ax, [PipeSpeed]
 		mov [PipeX_offset_Num], ax
 		pop ax
+		cmp [PipeX_offset_Num], 100
+		jne dontaddScore
+		push bx
+		push cx
+		mov bx, offset Score
+		inc [byte ptr bx+3]
+		
+		mov     al, 182         ; Prepare the speaker for the
+        out     43h, al         ;  note.
+        mov     ax, 1140        ; Frequency number (in decimal)
+                                ;  for middle C.
+        out     42h, al         ; Output low byte.
+        mov     al, ah          ; Output high byte.
+        out     42h, al 
+        in      al, 61h         ; Turn on note (get value from
+                                ;  port 61h).
+        or      al, 00000011b   ; Set bits 1 and 0.
+        out     61h, al         ; Send new value.
+        mov     bx, 25          ; Pause for duration of note.
+pause1:
+        mov     cx, 65535
+pause2:
+        dec     cx
+        jne     pause2
+        dec     bx
+        jne     pause1
+        in      al, 61h         ; Turn off note (get value from
+                                ;  port 61h).
+        and     al, 11111100b   ; Reset bits 1 and 0.
+        out     61h, al         ; Send new value.
+		
+		mov cx, 3
+		Scoreloop:
+		mov bx, offset Score
+		add bx, cx
+		cmp [byte ptr bx], ':'
+		jne dontchangeScore
+		mov [byte ptr bx], "0"
+		inc [byte ptr bx-1]
+		dontchangeScore:
+		loop Scoreloop
+		mov bx, offset Score
+		cmp [byte ptr bx], ':'
+		jne nomax
+		mov [byte ptr bx], '0'
+		nomax:
+		pop cx
+		pop bx
+		dontaddScore:
 		cmp [PipeX_offset_Num], 256
 		jl DontResetOffset
 		mov [PipeX_offset_Num],0
@@ -486,9 +533,75 @@ proc DisplayScore
 	pop ax
 	ret
 endp DisplayScore
+proc StartScreen
+	push ax
+	push dx
+	mov ah, 9
+	mov dx, offset logoText
+	int 21h		
+	mov dx, offset startText
+	int 21h	
+	
+	mov ah, 7
+	int 21h
+	pop dx
+	pop ax
+	ret
+endp StartScreen
+proc Die
+	mov ax, 13h
+	int 10h
+	
+	mov ah, 9
+	mov dx, offset endText1
+	int 21h
+	mov dx, offset Score
+	int 21h
+	mov dx, offset endText2
+	int 21h
+	again:
+	mov ah, 7
+	int 21h
+	cmp al, 'y'
+	je playAgain
+	cmp al, 'Y'
+	je playAgain
+	cmp al, 'n'
+	jne noexit1
+	jmp exit
+	noexit1:
+	cmp al, 'N'
+	jne noexit2
+	jmp exit
+	noexit2:
+	jmp again
+	playAgain:
+	mov [PipeY_Offset_Num],  100
+	mov [PipeX_offset_Num], 0
+	mov [y], 90
+	mov [velocity], -1
+	mov [rand], 0
+	mov cx, 4
+	resetScoreLoop:
+	mov bx, offset Score
+	add bx, cx
+	dec bx
+	mov [byte ptr bx], '0'
+	loop resetScoreLoop
+	mov ax, 13h
+	int 10h
+	jmp restart
+	ret
+endp Die
 	start:
 	mov ax, @data
 	mov ds, ax
+	mov ax, 13h
+	int 10h
+	mov ax, 2h
+	int 10h
+	call StartScreen
+	restart:
 	mov ax, 13h
 	int 10h
 	mov ax,1010h
@@ -513,7 +626,6 @@ endp DisplayScore
 	mov cl, 30
 	int 10h;light green 3
 	gameLoop:
-		
 		call BackGround
 		call drawPipe
 		call drawStem
@@ -524,7 +636,7 @@ endp DisplayScore
 		mov [y], al
 		mov al, 0
 		mov cx, 0
-		mov dx, 04000h
+		mov dx, 08000h
 		mov ah, 86h
 		int 15H ;wait
 	
@@ -537,7 +649,7 @@ endp DisplayScore
 		int 21h
 		cmp al, 32
 		jne noSpace
-		cmp [velocity], 2
+		cmp [velocity], 3
 		jg noSpace
 		mov [velocity], 7
 		noSpace:
@@ -547,7 +659,9 @@ endp DisplayScore
 			mov [velocity],-6
 			goodVelocity:
 		call DisplayScore		
-		jmp gameLoop							
+		jmp gameLoop	
+		Hit:
+		call Die
 exit:
 	mov ax, 4c00h
 	int 21h
